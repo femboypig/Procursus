@@ -114,11 +114,12 @@ jobs:
             NO_PGP=1
 
       - name: Build Jailed IPA
-        if: ${{ inputs.package_ipa }}
+        if: always() && inputs.package_ipa
         run: |
           ./build_tools/make_jailed_ipa.sh
 
       - name: Upload build artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: procursus-${{ inputs.package }}-${{ inputs.target }}
