@@ -37,12 +37,16 @@ jobs:
 
       - name: Setup Homebrew dependencies
         run: |
-          brew install bash make coreutils gnu-sed gnu-tar grep findutils automake autoconf cmake pkg-config ldid dpkg zstd zip groff gpatch gnupg docbook-xsl bison flex po4a
+          brew install bash make coreutils gnu-sed gnu-tar grep findutils automake autoconf cmake pkg-config ldid dpkg zstd zip groff gpatch gnupg docbook-xsl bison flex gettext ncurses
           echo "/opt/homebrew/opt/gnu-sed/libexec/gnubin" >> $GITHUB_PATH
           echo "/opt/homebrew/opt/gnu-tar/libexec/gnubin" >> $GITHUB_PATH
           echo "/opt/homebrew/opt/grep/libexec/gnubin" >> $GITHUB_PATH
           echo "/opt/homebrew/opt/coreutils/libexec/gnubin" >> $GITHUB_PATH
           echo "/opt/homebrew/opt/findutils/libexec/gnubin" >> $GITHUB_PATH
+          echo "$(brew --prefix bison)/bin" >> $GITHUB_PATH
+          echo "$(brew --prefix flex)/bin" >> $GITHUB_PATH
+          echo "$(brew --prefix gettext)/bin" >> $GITHUB_PATH
+          echo "$(brew --prefix ncurses)/bin" >> $GITHUB_PATH
           echo "/opt/homebrew/bin:/usr/local/bin" >> $GITHUB_PATH
 
       - name: Setup Procursus toolchain
@@ -69,7 +73,7 @@ jobs:
           sudo mkdir -p /opt/procursus/etc/apt/sources.list.d
           echo -e "Types: deb\nURIs: https://apt.procurs.us\nSuites: big_sur\nComponents: main\n" | sudo tee /opt/procursus/etc/apt/sources.list.d/procursus.sources
           sudo /opt/procursus/bin/apt-get update --allow-insecure-repositories || true
-          sudo /opt/procursus/bin/apt-get install -y --allow-unauthenticated -o Dpkg::Options::="--force-confnew" odcctools ldid ld64 file || true
+          sudo /opt/procursus/bin/apt-get install -y --allow-unauthenticated -o Dpkg::Options::="--force-confnew" odcctools ldid ld64 file fakeroot po4a || true
           
           # Install triehash helper
           sudo curl -sLo /opt/procursus/bin/triehash https://raw.githubusercontent.com/julian-klode/triehash/master/triehash.pl
@@ -82,6 +86,9 @@ jobs:
           sudo ln -sf /opt/homebrew/opt/grep/libexec/gnubin/grep /opt/procursus/libexec/gnubin/grep
           sudo ln -sf /opt/homebrew/opt/findutils/libexec/gnubin/* /opt/procursus/libexec/gnubin/ || true
           sudo ln -sf /opt/homebrew/opt/coreutils/libexec/gnubin/* /opt/procursus/libexec/gnubin/ || true
+          sudo ln -sf "$(brew --prefix bison)/bin/yacc" /opt/procursus/libexec/gnubin/yacc || true
+          sudo ln -sf "$(brew --prefix flex)/bin/flex" /opt/procursus/libexec/gnubin/lex || true
+          sudo ln -sf "$(brew --prefix gettext)/bin/autopoint" /opt/procursus/libexec/gnubin/autopoint || true
           if command -v gpatch &>/dev/null; then
             sudo ln -sf "$(command -v gpatch)" /opt/procursus/libexec/gnubin/patch
           fi
