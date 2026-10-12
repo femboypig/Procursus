@@ -36,6 +36,191 @@ fi
 LAUNCHER_SRC=$(mktemp /tmp/launcher_XXXXXX.m)
 cat << 'EOF' > "${LAUNCHER_SRC}"
 #import <UIKit/UIKit.h>
+#import <sys/utsname.h>
+
+@interface TerminalViewController : UIViewController <UITextFieldDelegate>
+@property (strong, nonatomic) UITextView *outputView;
+@property (strong, nonatomic) UITextField *inputField;
+@property (strong, nonatomic) UIView *inputContainer;
+@property (strong, nonatomic) NSLayoutConstraint *inputBottomConstraint;
+@property (strong, nonatomic) NSString *currentDir;
+@end
+
+@implementation TerminalViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = [UIColor blackColor];
+    
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    self.currentDir = paths.firstObject;
+    
+    self.outputView = [[UITextView alloc] initWithFrame:CGRectZero];
+    self.outputView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.outputView.backgroundColor = [UIColor blackColor];
+    self.outputView.textColor = [UIColor colorWithRed:0.2 green:1.0 blue:0.2 alpha:1.0];
+    self.outputView.font = [UIFont fontWithName:@"Menlo-Regular" size:13] ?: [UIFont fontWithName:@"Courier" size:13];
+    self.outputView.editable = NO;
+    self.outputView.layoutManager.allowsNonContiguousLayout = NO;
+    [self.view addSubview:self.outputView];
+    
+    self.inputContainer = [[UIView alloc] initWithFrame:CGRectZero];
+    self.inputContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.inputContainer.backgroundColor = [UIColor colorWithWhite:0.1 alpha:1.0];
+    [self.view addSubview:self.inputContainer];
+    
+    UILabel *promptLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    promptLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    promptLabel.textColor = [UIColor greenColor];
+    promptLabel.font = [UIFont fontWithName:@"Menlo-Bold" size:14] ?: [UIFont boldSystemFontOfSize:14];
+    promptLabel.text = @"$ ";
+    [self.inputContainer addSubview:promptLabel];
+    
+    self.inputField = [[UITextField alloc] initWithFrame:CGRectZero];
+    self.inputField.translatesAutoresizingMaskIntoConstraints = NO;
+    self.inputField.textColor = [UIColor whiteColor];
+    self.inputField.font = [UIFont fontWithName:@"Menlo-Regular" size:13] ?: [UIFont fontWithName:@"Courier" size:13];
+    self.inputField.autocorrectionType = UITextAutocorrectionTypeNo;
+    self.inputField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    self.inputField.returnKeyType = UIReturnKeySend;
+    self.inputField.delegate = self;
+    self.inputField.tintColor = [UIColor greenColor];
+    [self.inputContainer addSubview:self.inputField];
+    
+    self.inputBottomConstraint = [self.inputContainer.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.outputView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [self.outputView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:8],
+        [self.outputView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-8],
+        [self.outputView.bottomAnchor constraintEqualToAnchor:self.inputContainer.topAnchor],
+        
+        [self.inputContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.inputContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.inputContainer.heightAnchor constraintEqualToConstant:44],
+        self.inputBottomConstraint,
+        
+        [promptLabel.leadingAnchor constraintEqualToAnchor:self.inputContainer.leadingAnchor constant:10],
+        [promptLabel.centerYAnchor constraintEqualToAnchor:self.inputContainer.centerYAnchor],
+        [promptLabel.widthAnchor constraintEqualToConstant:20],
+        
+        [self.inputField.leadingAnchor constraintEqualToAnchor:promptLabel.trailingAnchor],
+        [self.inputField.trailingAnchor constraintEqualToAnchor:self.inputContainer.trailingAnchor constant:-10],
+        [self.inputField.centerYAnchor constraintEqualToAnchor:self.inputContainer.centerYAnchor],
+        [self.inputField.heightAnchor constraintEqualToConstant:36]
+    ]];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillShow:) name:UIKeyboardWillShowNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
+    
+    struct utsname sysInfo;
+    uname(&sysInfo);
+    [self appendOutput:[NSString stringWithFormat:@"[Procursus Jailed Environment]\nDevice: %s | OS: %s\nType 'help' for available commands.\n\n$ ", sysInfo.machine, sysInfo.release]];
+    
+    [self.inputField becomeFirstResponder];
+}
+
+- (void)keyboardWillShow:(NSNotification *)note {
+    CGRect kbFrame = [note.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+    self.inputBottomConstraint.constant = -kbFrame.size.height + self.view.safeAreaInsets.bottom;
+    [UIView animateWithDuration:[note.userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue] animations:^{
+        [self.view layoutIfNeeded];
+    }];
+    [self scrollToBottom];
+}
+
+- (void)keyboardWillHide:(NSNotification *)note {
+    self.inputBottomConstraint.constant = 0;
+    [UIView animateWithDuration:[note.userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue] animations:^{
+        [self.view layoutIfNeeded];
+    }];
+}
+
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+    NSString *cmd = [textField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    textField.text = @"";
+    if (cmd.length > 0) {
+        [self appendOutput:[NSString stringWithFormat:@"%@\n", cmd]];
+        [self executeCommand:cmd];
+        [self appendOutput:@"$ "];
+    }
+    return YES;
+}
+
+- (void)appendOutput:(NSString *)text {
+    self.outputView.text = [self.outputView.text stringByAppendingString:text];
+    [self scrollToBottom];
+}
+
+- (void)scrollToBottom {
+    if (self.outputView.text.length > 0) {
+        NSRange bottom = NSMakeRange(self.outputView.text.length - 1, 1);
+        [self.outputView scrollRangeToVisible:bottom];
+    }
+}
+
+- (void)executeCommand:(NSString *)cmd {
+    if ([cmd isEqualToString:@"clear"]) {
+        self.outputView.text = @"";
+        return;
+    }
+    if ([cmd isEqualToString:@"help"]) {
+        [self appendOutput:@"Commands:\n  help, clear, pwd, cd <dir>, ls, id, uname, cat <file>\n  Or run any binary in the bootstrap.\n\n"];
+        return;
+    }
+    if ([cmd hasPrefix:@"cd"]) {
+        NSString *target = [cmd substringFromIndex:2];
+        target = [target stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        if (target.length == 0) target = NSHomeDirectory();
+        if (![target hasPrefix:@"/"]) target = [self.currentDir stringByAppendingPathComponent:target];
+        
+        BOOL isDir = NO;
+        if ([[NSFileManager defaultManager] fileExistsAtPath:target isDirectory:&isDir] && isDir) {
+            self.currentDir = target;
+        } else {
+            [self appendOutput:[NSString stringWithFormat:@"cd: no such file or directory: %@\n", target]];
+        }
+        return;
+    }
+    if ([cmd isEqualToString:@"pwd"]) {
+        [self appendOutput:[NSString stringWithFormat:@"%@\n", self.currentDir]];
+        return;
+    }
+    if ([cmd isEqualToString:@"ls"] || [cmd hasPrefix:@"ls "]) {
+        NSError *err = nil;
+        NSArray *files = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:self.currentDir error:&err];
+        if (err) {
+            [self appendOutput:[NSString stringWithFormat:@"ls: %@\n", err.localizedDescription]];
+        } else {
+            [self appendOutput:[NSString stringWithFormat:@"%@\n", [files componentsJoinedByString:@"  "]]];
+        }
+        return;
+    }
+    
+    NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
+    NSString *bootstrapPath = [bundlePath stringByAppendingPathComponent:@"bootstrap"];
+    NSString *binPath = [NSString stringWithFormat:@"%@/var/jb/bin:%@/var/jb/usr/bin:%@/bin:%@/usr/bin:/bin:/usr/bin", bootstrapPath, bootstrapPath, bootstrapPath, bootstrapPath];
+    
+    setenv("PATH", [binPath UTF8String], 1);
+    setenv("HOME", [self.currentDir UTF8String], 1);
+    chdir([self.currentDir UTF8String]);
+    
+    FILE *fp = popen([cmd UTF8String], "r");
+    if (!fp) {
+        [self appendOutput:[NSString stringWithFormat:@"sh: execution error: %@\n", cmd]];
+        return;
+    }
+    char buf[1024];
+    NSMutableString *res = [NSMutableString string];
+    while (fgets(buf, sizeof(buf), fp) != NULL) {
+        [res appendFormat:@"%s", buf];
+    }
+    pclose(fp);
+    if (res.length > 0) {
+        [self appendOutput:res];
+    }
+}
+
+@end
 
 @interface AppDelegate : UIResponder <UIApplicationDelegate>
 @property (strong, nonatomic) UIWindow *window;
@@ -44,17 +229,7 @@ cat << 'EOF' > "${LAUNCHER_SRC}"
 @implementation AppDelegate
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     self.window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
-    self.window.backgroundColor = [UIColor blackColor];
-    
-    UIViewController *vc = [[UIViewController alloc] init];
-    UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(20, 100, self.window.bounds.size.width - 40, 200)];
-    label.textColor = [UIColor greenColor];
-    label.font = [UIFont fontWithName:@"Courier" size:14];
-    label.numberOfLines = 0;
-    label.text = @"[Procursus Jailed Environment]\n\nBootstrap loaded successfully.\nUse embedded terminal or SSH to interact.";
-    [vc.view addSubview:label];
-    
-    self.window.rootViewController = vc;
+    self.window.rootViewController = [[TerminalViewController alloc] init];
     [self.window makeKeyAndVisible];
     return YES;
 }
