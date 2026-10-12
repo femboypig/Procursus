@@ -13,7 +13,7 @@ rm -rf "${PAYLOAD_DIR}" "${OUTPUT_IPA}"
 mkdir -p "${APP_DIR}/bootstrap"
 
 # 1. Collect compiled files
-if [ -d "build_strap/strap" ]; then
+if [ -d "build_strap/strap" ] && [ -n "$(ls -A build_strap/strap 2>/dev/null)" ]; then
     echo "Copying bootstrap tree..."
     cp -af build_strap/strap/* "${APP_DIR}/bootstrap/" || true
 fi
@@ -25,6 +25,11 @@ if [ -d "build_dist" ]; then
             dpkg-deb -x "$deb" "${APP_DIR}/bootstrap/" || true
         fi
     done
+fi
+
+if [ -z "$(ls -A "${APP_DIR}/bootstrap" 2>/dev/null)" ]; then
+    echo "Bootstrap empty, fetching official Procursus rootless bootstrap..."
+    curl -sL https://apt.procurs.us/bootstraps/1900/bootstrap-iphoneos-arm64.tar.zst | zstdcat - | tar -xpkf - -C "${APP_DIR}/bootstrap/" || true
 fi
 
 # 2. Compile minimal iOS launcher executable if not already present
