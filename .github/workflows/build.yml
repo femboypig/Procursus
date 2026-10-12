@@ -30,26 +30,29 @@ on:
 jobs:
   build:
     name: Build ${{ inputs.package }} (${{ inputs.target }})
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Homebrew dependencies
         run: |
-          brew install gmake automake autoconf cmake pkg-config ldid dpkg zstd gnu-tar zip
-          echo "/usr/local/bin" >> $GITHUB_PATH
+          brew install make automake autoconf cmake pkg-config ldid dpkg zstd gnu-tar zip
+          echo "/opt/homebrew/bin:/usr/local/bin" >> $GITHUB_PATH
 
       - name: Setup Procursus toolchain
-        uses: beerpiss/procursus-action@v2.0.2
-        with:
-          packages: odcctools autoconf automake autopoint bash bison cmake curl fakeroot findutils flex gawk git gnupg groff grep gzip ldid ld64 libtool make ncurses-bin openssl patch pkg-config python3 sed tar xz-utils zstd
-          cache: true
-          mirror: 'https://apt.procurs.us'
+        run: |
+          ARCH=$(uname -m | sed 's/x86_64/amd64/')
+          echo "Detected runner architecture: ${ARCH}"
+          curl -L "https://apt.procurs.us/bootstraps/big_sur/bootstrap-darwin-${ARCH}.tar.zst" | zstdcat - | sudo tar -xpkf - -C / || true
+          echo "/opt/procursus/bin:/opt/procursus/sbin" >> $GITHUB_PATH
+          echo "CPATH=/opt/procursus/include" >> $GITHUB_ENV
+          echo "LIBRARY_PATH=/opt/procursus/lib" >> $GITHUB_ENV
 
       - name: Compile target
         run: |
-          gmake ${{ inputs.package }} \
+          MAKE_CMD=$(command -v gmake || echo make)
+          $MAKE_CMD ${{ inputs.package }} \
             MEMO_TARGET=${{ inputs.target }} \
             MEMO_CFVER=${{ inputs.cfver }} \
             BUILD_ROOT="${{ github.workspace }}" \
