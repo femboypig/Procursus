@@ -37,7 +37,7 @@ jobs:
 
       - name: Setup Homebrew dependencies
         run: |
-          brew install bash make coreutils gnu-sed gnu-tar grep findutils automake autoconf cmake pkg-config ldid dpkg zstd zip
+          brew install bash make coreutils gnu-sed gnu-tar grep findutils automake autoconf cmake pkg-config ldid dpkg zstd zip groff gpatch gnupg docbook-xsl bison flex po4a
           echo "/opt/homebrew/opt/gnu-sed/libexec/gnubin" >> $GITHUB_PATH
           echo "/opt/homebrew/opt/gnu-tar/libexec/gnubin" >> $GITHUB_PATH
           echo "/opt/homebrew/opt/grep/libexec/gnubin" >> $GITHUB_PATH
@@ -50,7 +50,27 @@ jobs:
           ARCH=$(uname -m | sed 's/x86_64/amd64/')
           echo "Detected runner architecture: ${ARCH}"
           curl -L "https://apt.procurs.us/bootstraps/big_sur/bootstrap-darwin-${ARCH}.tar.zst" | zstdcat - | sudo tar -xpkf - -C / || true
-          echo "/opt/procursus/bin:/opt/procursus/sbin" >> $GITHUB_PATH
+          
+          # Setup apt user if missing
+          if ! id _apt &>/dev/null; then
+            sudo dscl . -create /Users/_apt UserShell /usr/bin/false
+            sudo dscl . -create /Users/_apt NSFHomeDirectory /var/empty
+            sudo dscl . -create /Users/_apt PrimaryGroupID -1
+            sudo dscl . -create /Users/_apt UniqueID 499
+            sudo dscl . -create /Users/_apt RealName "APT Sandbox User"
+          fi
+          
+          # Setup apt repo and install essential procursus binaries
+          sudo mkdir -p /opt/procursus/etc/apt/sources.list.d
+          echo -e "Types: deb\nURIs: https://apt.procurs.us\nSuites: big_sur\nComponents: main\n" | sudo tee /opt/procursus/etc/apt/sources.list.d/procursus.sources
+          sudo /opt/procursus/bin/apt-get update || true
+          sudo /opt/procursus/bin/apt-get install -y -o Dpkg::Options::="--force-confnew" odcctools ldid ld64 file || true
+          
+          # Install triehash helper
+          sudo curl -sLo /opt/procursus/bin/triehash https://raw.githubusercontent.com/julian-klode/triehash/master/triehash.pl
+          sudo chmod +x /opt/procursus/bin/triehash
+          
+          echo "/opt/procursus/bin:/opt/procursus/libexec/gnubin:/opt/procursus/sbin" >> $GITHUB_PATH
           echo "CPATH=/opt/procursus/include" >> $GITHUB_ENV
           echo "LIBRARY_PATH=/opt/procursus/lib" >> $GITHUB_ENV
 
