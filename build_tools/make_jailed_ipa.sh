@@ -247,7 +247,7 @@ if command -v xcrun &>/dev/null; then
     xcrun -sdk iphoneos clang -arch arm64 \
         -miphoneos-version-min=15.0 \
         -fobjc-arc \
-        -framework UIKit -framework Foundation \
+        -framework UIKit -framework Foundation -framework CoreGraphics \
         "${LAUNCHER_SRC}" -o "${APP_DIR}/${APP_NAME}"
     rm -f "${LAUNCHER_SRC}"
 else
