@@ -60,15 +60,37 @@ jobs:
             sudo dscl . -create /Users/_apt RealName "APT Sandbox User"
           fi
           
-          # Setup apt repo and install essential procursus binaries
+          # Setup apt repo keyring and install essential procursus binaries
+          sudo mkdir -p /opt/procursus/etc/apt/trusted.gpg.d
+          if [ -f "build_misc/keyrings/procursus/memo.gpg" ]; then
+            sudo cp build_misc/keyrings/procursus/memo.gpg /opt/procursus/etc/apt/trusted.gpg.d/procursus.gpg
+          fi
+          
           sudo mkdir -p /opt/procursus/etc/apt/sources.list.d
           echo -e "Types: deb\nURIs: https://apt.procurs.us\nSuites: big_sur\nComponents: main\n" | sudo tee /opt/procursus/etc/apt/sources.list.d/procursus.sources
-          sudo /opt/procursus/bin/apt-get update || true
-          sudo /opt/procursus/bin/apt-get install -y -o Dpkg::Options::="--force-confnew" odcctools ldid ld64 file || true
+          sudo /opt/procursus/bin/apt-get update --allow-insecure-repositories || true
+          sudo /opt/procursus/bin/apt-get install -y --allow-unauthenticated -o Dpkg::Options::="--force-confnew" odcctools ldid ld64 file || true
           
           # Install triehash helper
           sudo curl -sLo /opt/procursus/bin/triehash https://raw.githubusercontent.com/julian-klode/triehash/master/triehash.pl
           sudo chmod +x /opt/procursus/bin/triehash
+          
+          # Ensure gnubin symlinks exist in /opt/procursus/libexec/gnubin
+          sudo mkdir -p /opt/procursus/libexec/gnubin
+          sudo ln -sf /opt/homebrew/opt/gnu-sed/libexec/gnubin/sed /opt/procursus/libexec/gnubin/sed
+          sudo ln -sf /opt/homebrew/opt/gnu-tar/libexec/gnubin/tar /opt/procursus/libexec/gnubin/tar
+          sudo ln -sf /opt/homebrew/opt/grep/libexec/gnubin/grep /opt/procursus/libexec/gnubin/grep
+          sudo ln -sf /opt/homebrew/opt/findutils/libexec/gnubin/* /opt/procursus/libexec/gnubin/ || true
+          sudo ln -sf /opt/homebrew/opt/coreutils/libexec/gnubin/* /opt/procursus/libexec/gnubin/ || true
+          if command -v gpatch &>/dev/null; then
+            sudo ln -sf "$(command -v gpatch)" /opt/procursus/libexec/gnubin/patch
+          fi
+          
+          # Link docbook-xsl
+          sudo mkdir -p /opt/procursus/share/xml/docbook/stylesheet
+          if [ -d "/opt/homebrew/opt/docbook-xsl/docbook-xsl" ]; then
+            sudo ln -sf /opt/homebrew/opt/docbook-xsl/docbook-xsl /opt/procursus/share/xml/docbook/stylesheet/docbook-xsl
+          fi
           
           echo "/opt/procursus/bin:/opt/procursus/libexec/gnubin:/opt/procursus/sbin" >> $GITHUB_PATH
           echo "CPATH=/opt/procursus/include" >> $GITHUB_ENV
