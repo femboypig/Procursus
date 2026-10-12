@@ -1,0 +1,71 @@
+name: Build Procursus
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Target package or rule (e.g. bash-package, nano-package, bootstrap)"
+        required: true
+        default: "bash-package"
+      target:
+        description: "Architecture / Environment target"
+        required: true
+        default: "iphoneos-arm64-rootless"
+        type: choice
+        options:
+          - "iphoneos-arm64-rootless"
+          - "iphoneos-arm64"
+          - "iphoneos-arm64e-rootless"
+          - "darwin-arm64"
+      cfver:
+        description: "CoreFoundation version (e.g. 1900 for iOS 16, 2000 for iOS 17, 1800 for iOS 15)"
+        required: true
+        default: "1900"
+      package_ipa:
+        description: "Package output into a Jailed .ipa file"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    name: Build ${{ inputs.package }} (${{ inputs.target }})
+    runs-on: macos-13
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Homebrew dependencies
+        run: |
+          brew install gmake automake autoconf cmake pkg-config ldid dpkg zstd gnu-tar zip
+          echo "/usr/local/bin" >> $GITHUB_PATH
+
+      - name: Setup Procursus toolchain
+        uses: beerpiss/procursus-action@v2.0.2
+        with:
+          packages: odcctools autoconf automake autopoint bash bison cmake curl fakeroot findutils flex gawk git gnupg groff grep gzip ldid ld64 libtool make ncurses-bin openssl patch pkg-config python3 sed tar xz-utils zstd
+          cache: true
+          mirror: 'https://apt.procurs.us'
+
+      - name: Compile target
+        run: |
+          gmake ${{ inputs.package }} \
+            MEMO_TARGET=${{ inputs.target }} \
+            MEMO_CFVER=${{ inputs.cfver }} \
+            BUILD_ROOT="${{ github.workspace }}" \
+            NO_PGP=1
+
+      - name: Build Jailed IPA
+        if: ${{ inputs.package_ipa }}
+        run: |
+          ./build_tools/make_jailed_ipa.sh
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: procursus-${{ inputs.package }}-${{ inputs.target }}
+          path: |
+            build_dist/*.deb
+            build_strap/*.tar*
+            *.ipa
+          if-no-files-found: warn
